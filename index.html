@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Generador de Fotomosaico</title>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      background-color: #0a0a0a;
+      color: #eaeaea;
+      font-family: 'Inter', sans-serif;
+      text-align: center;
+      padding: 30px;
+    }
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+      color: #ffffff;
+    }
+    p {
+      font-size: 1.1rem;
+      margin-bottom: 30px;
+      color: #ccc;
+    }
+    label {
+      font-weight: 600;
+      color: #ddd;
+    }
+    input[type="file"] {
+      background: #1a1a1a;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 10px;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 12px 24px;
+      background: #ffffff;
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 600;
+      margin-top: 10px;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background-color: #e6e6e6;
+    }
+    #tile-preview {
+      position: relative;
+      margin: 30px auto 10px auto;
+      background-color: #111;
+      border: 2px solid #333;
+      overflow: hidden;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+      width: 640px;
+      height: 480px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .tile {
+      position: absolute;
+      width: 128px;
+      height: 128px;
+      transition: transform 1.0s ease, opacity 1.0s ease;
+      transform-origin: center center;
+      box-shadow: 0 0 6px rgba(255,255,255,0.1);
+    }
+    .tile.anim-start {
+      opacity: 0;
+      transform: scale(10);
+    }
+    .tile.fade-out {
+      opacity: 0;
+      transition: opacity 1s ease;
+    }
+    #final-image {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 1.5s ease-in-out;
+      z-index: 5;
+    }
+    #loading-spinner {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 480px;
+      height: 180px;
+      z-index: 10;
+      flex-direction: column;
+      gap: 12px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .ring {
+      position: absolute;
+      border-radius: 50%;
+      border: 4.8px solid transparent;
+      border-top-color: #fff;
+    }
+    .ring1 { width: 450px; height: 450px; animation: spin 1.2s linear infinite; }
+    .ring2 { width: 421.875px; height: 421.875px; animation: spin 1.4s linear infinite; }
+    .ring3 { width: 393.75px; height: 393.75px; animation: spin 1.6s linear infinite; }
+    .ring4 { width: 365.625px; height: 365.625px; animation: spin 1.8s linear infinite; }
+    .ring5 { width: 337.5px; height: 337.5px; animation: spin 2s linear infinite; }
+    .ring6 { width: 309.375px; height: 309.375px; animation: spin 2.2s linear infinite; }
+    .ring7 { width: 281.25px; height: 281.25px; animation: spin 2.4s linear infinite; }
+    .ring8 { width: 253.125px; height: 253.125px; animation: spin 2.6s linear infinite; }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    #loading-spinner span {
+      position: relative;
+      display: inline-block;
+      font-size: 1.25rem;
+      color: #fff;
+      font-weight: 600;
+      z-index: 20;
+      pointer-events: none;
+      padding: 50px 100px;
+      background-color: transparent;
+      text-align: center;
+    }
+    #progreso-container {
+      margin: 20px auto;
+      font-size: 16px;
+      color: #bbb;
+      width: 640px; /* Coincide con #tile-preview */
+    }
+
+    progress {
+      appearance: none;
+      width: 100%;
+      height: 20px;
+      border-radius: 10px;
+      background-color: #222;
+      border: 1px solid #444;
+      overflow: hidden;
+    }
+
+    progress::-webkit-progress-bar {
+      background-color: #222;
+    }
+
+    progress::-webkit-progress-value {
+      background: linear-gradient(
+        120deg,
+        #888,
+        #ccc,
+        #888
+      );
+      background-size: 200% 100%;
+      animation: shimmer-progress 1.2s linear infinite;
+      transition: width 0.3s ease;
+      border-radius: 10px;
+    }
+
+    @keyframes shimmer-progress {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    .estrella {
+      display: inline-block;
+      position: relative;
+      width: 40px;
+      height: 40px;
+      font-size: 40px;
+      color: #666;
+    }
+    .estrella::before {
+      content: '☆';
+      position: absolute;
+      left: 0;
+      top: 0;
+    }
+    .estrella.full::before {
+      content: '★';
+      color: #fff;
+    }
+    .estrella.half::before {
+      content: '★';
+      color: #fff;
+      background: linear-gradient(to right, #fff 50%, #333 50%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    textarea {
+      border-radius: 8px;
+      border: 1px solid #444;
+      padding: 10px;
+      background: #1a1a1a;
+      color: white;
+      resize: vertical;
+    }
+  </style>
+</head>
+<body>
+  <h1>Generador de Fotomosaico con IA</h1>
+  <p>Sube tu <strong>imagen objetivo</strong> y varias <strong>imágenes tiles</strong> para crear el mosaico en tiempo real.</p>
+
+  <label for="foto">Imagen objetivo (.jpg, .png):</label><br>
+  <input type="file" id="foto" accept=".jpg,.jpeg,.png" required><br>
+
+  <label for="tiles">Imágenes tiles (puedes subir varias):</label><br>
+  <input type="file" id="tiles" accept=".jpg,.jpeg,.png" multiple required><br>
+
+  <button onclick="subirArchivos()">Crear Fotomosaico</button>
+
+  <div id="tile-preview">
+    <div id="loading-spinner" style="display: none;">
+      <div class="ring ring1"></div>
+      <div class="ring ring2"></div>
+      <div class="ring ring3"></div>
+      <div class="ring ring4"></div>
+      <div class="ring ring5"></div>
+      <div class="ring ring6"></div>
+      <div class="ring ring7"></div>
+      <div class="ring ring8"></div>
+      <span>Entrenando modelo,<br>espere por favor...</span>
+    </div>
+    <img id="final-image" src="" alt="Mosaico final" />
+  </div>
+
+  <div id="progreso-container" style="display: none;">
+    <progress id="progreso" value="0" max="100"></progress>
+    <div id="texto-progreso">0% (0 / 0 tiles)</div>
+  </div>
+
+  <!-- Comentarios y feedback -->
+  <div id="resultado-final" style="margin-top: 30px; display: none; text-align: center;">
+    <label for="comentario">Comentarios:</label><br>
+    <textarea id="comentario" rows="4" cols="50" placeholder="Escribe aquí tu opinión..."></textarea><br><br>
+
+    <label>Valoración:</label><br>
+    <div id="estrellas" style="font-size: 40px; cursor: pointer; display: inline-block;"></div>
+
+    <div style="margin-top: 20px;">
+      <button onclick="enviarFeedback()">Enviar Feedback</button>
+      <button onclick="descargarMosaico()">Descargar Mosaico</button>
+    </div>
+  </div>
+
+  <script>
+  const WORKER_URL = 'https://fotomosaico.acqacq2000.workers.dev/';   // ← tu dominio CF Worker
+
+  let tileWidth = 32, tileHeight = 32;
+  let totalTiles = 0, tilesColocadas = 0;
+  let puntuacionFinal = 0;
+  let socket = null;
+
+  // ---- helpers UI ↓ ----------------------------------------------------
+  const $ = id => document.getElementById(id);
+  const spinner = { show: () => $("loading-spinner").style.display = "flex",
+                    hide: () => $("loading-spinner").style.display = "none" };
+
+  // ---- subir archivos --------------------------------------------------
+  async function subirArchivos() {
+    const foto = $("foto").files[0];
+    const tiles = $("tiles").files;
+    if (!foto || !tiles.length) return alert("Falta la imagen o tiles.");
+
+    spinner.show();
+
+    // 1· Pide al Worker que encienda el pod y devuelva URLs
+    const { ws, http } = await fetch(WORKER_URL + '/start', { method: 'POST' })
+                                 .then(r => r.json());
+
+    // 2· Sube imagen y tiles al backend
+    const formData = new FormData();
+    formData.append('foto', foto);
+    Array.from(tiles).forEach(f => formData.append('tiles', f));
+
+    const resp = await fetch(http + '/subir', { method: 'POST', body: formData });
+    if (!resp.ok) { spinner.hide(); return alert("Error al subir archivos"); }
+
+    // 3· Conecta WebSocket al backend
+    conectarSocket(ws, http);
+  }
+
+  // ---- WebSocket -------------------------------------------------------
+  function conectarSocket(wsURL, httpURL) {
+    socket = io(wsURL, { transports: ['websocket'], reconnectionAttempts: 3 });
+
+    socket.on('mosaic_init', ({ cols, rows }) => {
+      spinner.hide();
+      const cont = $("tile-preview");
+      totalTiles = cols * rows; tilesColocadas = 0;
+
+      // redimensiona preview manteniendo aspect-ratio
+      const max = 640, ar = cols / rows;
+      cont.style.width  = (ar >= 1 ? max : max * ar) + "px";
+      cont.style.height = (ar >= 1 ? max / ar : max) + "px";
+      tileWidth  = cont.clientWidth  / cols;
+      tileHeight = cont.clientHeight / rows;
+      $("progreso-container").style.display = "block";
+      actualizarProgreso();
+    });
+
+    socket.on('tile_placed', ({ col, row, thumb }) => {
+      const img = Object.assign(document.createElement('img'), {
+        src: "data:image/png;base64," + thumb,
+        className: "tile anim-start",
+        style: `left:${col*tileWidth}px;top:${row*tileHeight}px;
+                width:${tileWidth}px;height:${tileHeight}px`
+      });
+      $("tile-preview").appendChild(img);
+      requestAnimationFrame(() => setTimeout(() => img.classList.remove("anim-start"), 20));
+      tilesColocadas++; actualizarProgreso();
+    });
+
+    socket.on('mosaic_done', ({ status, result_url }) => {
+      if (status === 'success') {
+        document.querySelectorAll('.tile').forEach(t => t.classList.add('fade-out'));
+        setTimeout(() => mostrarMosaicoFinal(result_url), 1000);
+        // 4· Apaga el pod
+        fetch(WORKER_URL + '/stop', { method: 'POST' });
+      }
+    });
+  }
+
+  // ---- UI helpers ------------------------------------------------------
+  function actualizarProgreso() {
+    const pct = (tilesColocadas / totalTiles) * 100;
+    $("progreso").value = pct;
+    $("texto-progreso").textContent =
+      `${pct.toFixed(1)}% (${tilesColocadas} / ${totalTiles} tiles)`;
+  }
+  function mostrarMosaicoFinal(url) {
+    $("final-image").src = url; $("final-image").style.opacity = 1;
+    $("progreso-container").style.display = "none";
+    $("resultado-final").style.display   = "block";
+    crearEstrellas();
+  }
+  // (… el resto de tus funciones de estrellas y feedback sin cambios …)
+
+  // ---- keep-alive cada 5 s --------------------------------------------
+  setInterval(() => socket?.connected && socket.emit('keepalive'), 5000);
+</script>
+</body>
+</html>
