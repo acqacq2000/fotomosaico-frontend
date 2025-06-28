@@ -14,10 +14,9 @@
   <p id="msg">Comprobando servidor…</p>
 
   <script>
-    // ➜ 1. Configura tu Worker y Pod
     const WORKER_URL = "https://fotomosaico.acqacq2000.workers.dev";
-    const POD_ID     = "ao66w2zl6kzlss";              // tu pod ID
-    const POD_URL    = `https://${POD_ID}-5000.proxy.runpod.net/`; // URL que finalmente abriremos
+    const POD_ID     = "ao66w2zl6kzlss";
+    const POD_URL    = `https://${POD_ID}-5000.proxy.runpod.net/`;
 
     const msg = document.getElementById("msg");
 
@@ -32,7 +31,7 @@
       return (data.status || data.desiredStatus || "UNKNOWN").toUpperCase();
     }
 
-    async function waitUntilHttpOk(url, maxTries = 60) { // 60 × 2 s = 2 min
+    async function waitUntilHttpOk(url, maxTries = 180) { // 180 × 2 s = 6 min
       const sleep = ms => new Promise(r => setTimeout(r, ms));
       for (let i = 0; i < maxTries; i++) {
         try {
@@ -51,7 +50,6 @@
         if (st !== "RUNNING") {
           msg.textContent = "Encendiendo el servidor, espera por favor…";
           await api("/start", { method: "POST" });
-          // Espera a que pase a RUNNING
           for (let i = 0; i < 40 && st !== "RUNNING"; i++) {
             await new Promise(r => setTimeout(r, 5000));
             st = await getStatus();
@@ -62,6 +60,7 @@
         const ok = await waitUntilHttpOk(POD_URL);
         if (ok) {
           msg.textContent = "Redirigiendo al generador de fotomosaicos…";
+          await new Promise(r => setTimeout(r, 1000));
           window.location.href = POD_URL;
         } else {
           msg.textContent = "🛑 No se pudo acceder a la aplicación. Intenta de nuevo más tarde.";
