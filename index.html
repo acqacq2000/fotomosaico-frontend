@@ -27,54 +27,49 @@
     </main>
 
     <script>
-      // 👉 Sustituye por tus valores
-      const POD_ID  = "x5y93442z3jok6";
-      const API_KEY = "rpa_Y4JHF9VLDXJIJV0YVTSOGTJ5ETANHG7EMCTQU14B1peidw";
-      const POD_URL = `https://${POD_ID}.runpod.run`;
+      // 👉 Sustituye estos valores
+      const WORKER_URL = "https://YOUR_WORKER_SUBDOMAIN.workers.dev"; // Proxy Cloudflare Worker
+      const POD_ID     = "YOUR_POD_ID";                               // Solo para formar la URL pública
+      const POD_URL    = `https://${POD_ID}.runpod.run`;
 
-      const BASE    = `https://rest.runpod.io/v1/pods/${POD_ID}`;
       const statusEl = document.getElementById('status');
       const startBtn = document.getElementById('startBtn');
       const stopBtn  = document.getElementById('stopBtn');
       const frame    = document.getElementById('appFrame');
       let podRunning = false;
 
-      async function getStatus(){
-        const res = await fetch(BASE,{headers:{Authorization:`Bearer ${API_KEY}`}});
+      async function api(path="", opts={}){
+        const res = await fetch(`${WORKER_URL}${path}`, opts);
         if(!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        return res.json();
+      }
+      async function getStatus(){
+        const data = await api("");
         return (data.status||data.desiredStatus||'UNKNOWN').toUpperCase();
       }
-
       async function startPod(){
         startBtn.disabled=true;
         statusEl.textContent='Arrancando…';
-        await fetch(`${BASE}/start`,{method:'POST',headers:{Authorization:`Bearer ${API_KEY}`}});
+        await api("/start", {method:'POST'});
         pollUntil('RUNNING');
       }
-
       async function stopPod(){
         if(!podRunning) return;
         stopBtn.disabled=true;
         statusEl.textContent='Apagando…';
-        await fetch(`${BASE}/stop`,{method:'POST',headers:{Authorization:`Bearer ${API_KEY}`}});
+        await api("/stop", {method:'POST'});
         pollUntil('STOPPED');
       }
-
-      // llamada síncrona en cierre de pestaña
-      async function stopPodSync(){
+      function stopPodSync(){
         if(!podRunning) return;
         try{
-          const headers={"Authorization":`Bearer ${API_KEY}`};
           if(navigator.sendBeacon){
-            const blob=new Blob([],{type:'application/json'});
-            navigator.sendBeacon(`${BASE}/stop`,blob, {headers});
+            navigator.sendBeacon(`${WORKER_URL}/stop`);
           }else{
-            fetch(`${BASE}/stop`,{method:'POST',headers,keepalive:true});
+            fetch(`${WORKER_URL}/stop`,{method:'POST',keepalive:true});
           }
         }catch(e){}
       }
-
       async function pollUntil(target){
         const delay=ms=>new Promise(r=>setTimeout(r,ms));
         for(let i=0;i<120;i++){
@@ -92,7 +87,6 @@
         statusEl.textContent='⛔️ Tiempo agotado';
         startBtn.disabled=stopBtn.disabled=false;
       }
-
       function readyState(){
         podRunning=true;
         statusEl.textContent='Servidor en marcha ✅';
@@ -109,7 +103,6 @@
         startBtn.disabled=false;
         stopBtn.style.display='none';
       }
-
       async function init(){
         try{
           const st=await getStatus();
@@ -117,7 +110,6 @@
         }catch(e){ statusEl.textContent=e.message; }
       }
 
-      // Eventos
       startBtn.addEventListener('click',startPod);
       stopBtn.addEventListener('click',stopPod);
       window.addEventListener('beforeunload',stopPodSync);
