@@ -87,13 +87,29 @@
         statusEl.textContent='⛔️ Tiempo agotado';
         startBtn.disabled=stopBtn.disabled=false;
       }
-      function readyState(){
-        podRunning=true;
-        statusEl.textContent='Servidor en marcha ✅';
-        frame.src=POD_URL;
-        frame.style.display='block';
-        stopBtn.style.display='inline-block';
-        startBtn.style.display='none';
+      async function waitUntilUp(url, maxTries = 30) {
+        for (let i = 0; i < maxTries; i++) {
+          try {
+            const r = await fetch(url, { method: "HEAD", mode: "no-cors" });
+            if (r.status === 200 || r.type === "opaque") return true;
+          } catch { /* ignore */ }
+          await new Promise(r => setTimeout(r, 3000));  // 3 s
+        }
+        return false;
+      }
+      
+      async function readyState() {
+        podRunning = true;
+        statusEl.textContent = "Servidor en marcha ⏳";
+        if (await waitUntilUp(POD_URL)) {
+          statusEl.textContent = "Servidor en marcha ✅";
+          frame.src = POD_URL;
+          frame.style.display = "block";
+        } else {
+          statusEl.textContent = "🛑 El contenedor no respondió a tiempo";
+        }
+        stopBtn.style.display = "inline-block";
+        startBtn.style.display = "none";
       }
       function stoppedState(){
         podRunning=false;
