@@ -24,24 +24,18 @@
     const overlay = document.getElementById("overlay");
     const frame   = document.getElementById("frame");
     let podRunning=false;
+    let stopped=false;
 
     const sleep = ms=>new Promise(r=>setTimeout(r,ms));
     const api   =(p="",o={})=>fetch(`${WORKER_URL}${p}`,o).then(r=>r.ok?r.json():Promise.reject(r));
     const getSt =()=>api("").then(d=>(d.status||d.desiredStatus||"UNKNOWN").toUpperCase());
 
-    // Comprueba que la URL devuelva algo distinto de 404 / 502 / 503
-    // Espera hasta que la URL devuelva 200 OK. Usa 'cors' para que un 404 provoque error,
-    // así no avanzamos hasta que la app responda de verdad.
     async function waitUntilReady(url,max=300){ // 300 × 2 s = 10 min
       for(let i=0;i<max;i++){
         try{
           const r=await fetch(url,{method:"GET",mode:"cors",cache:"no-store"});
           if(r.ok) return true; // solo 200–299
-        }catch{/* CORS o red */}
-        await sleep(2000);
-      }
-      return false;
-    }
+        }catch{}
         await sleep(2000);
       }
       return false;
@@ -59,7 +53,7 @@
       if(st!=="RUNNING"){
         overlay.textContent="Encendiendo servidor… Esto puede tardar un momento.";
         await api("/start",{method:"POST"});
-        for(let i=0;i<60&&st!=="RUNNING";i++){ // 5 min máx para arrancar
+        for(let i=0;i<60&&st!=="RUNNING";i++){
           await sleep(5000); st=await getSt();
         }
       }
@@ -68,16 +62,22 @@
       if(await waitUntilReady(POD_URL)){
         podRunning=true;
         overlay.textContent="Aplicación lista, cargando…";
-        await sleep(8000);   // espera extra de gracia
+        await sleep(8000);
         showFrame();
       }else{
         overlay.textContent="🛑 La aplicación no respondió a tiempo. Intenta más tarde.";
       }
     }
 
-    window.addEventListener("beforeunload",()=>{
-      if(podRunning) navigator.sendBeacon && navigator.sendBeacon(`${WORKER_URL}/stop`);
-    });
+    function stopPod(){
+      if(!podRunning||stopped) return;
+      stopped=true;
+      navigator.sendBeacon && navigator.sendBeacon(`${WORKER_URL}/stop`);
+    }
+
+    // Detiene el pod cuando el usuario abandona la página (tab close, refresh, mobile switch)
+    window.addEventListener("pagehide",stopPod);
+    window.addEventListener("beforeunload",stopPod);
 
     startFlow();
   </script>
