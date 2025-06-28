@@ -2,75 +2,66 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Redirigiendo al generador de fotomosaicos…</title>
+  <title>Generador de fotomosaicos</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root{font-family:system-ui,sans-serif;color-scheme:light dark}
-    body{margin:0;display:grid;place-items:center;min-height:100vh;background:#0d1117;color:#c9d1d9}
-    #msg{max-width:26rem;text-align:center;font-size:1rem;line-height:1.4}
+    html,body{margin:0;height:100%}
+    #overlay{position:fixed;inset:0;display:grid;place-items:center;background:#0d1117;color:#c9d1d9;z-index:10}
+    #frame{border:none;width:100%;height:100%;display:none}
   </style>
 </head>
 <body>
-  <p id="msg">Comprobando servidor…</p>
+  <div id="overlay">Preparando el generador de fotomosaicos…</div>
+  <iframe id="frame" sandbox="allow-scripts allow-same-origin allow-downloads"></iframe>
 
   <script>
     const WORKER_URL = "https://fotomosaico.acqacq2000.workers.dev";
     const POD_ID     = "ao66w2zl6kzlss";
     const POD_URL    = `https://${POD_ID}-5000.proxy.runpod.net/`;
 
-    const msg = document.getElementById("msg");
+    const overlay = document.getElementById("overlay");
+    const frame   = document.getElementById("frame");
+    let podRunning=false;
 
-    async function api(path = "", opts = {}) {
-      const r = await fetch(`${WORKER_URL}${path}`, opts);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return r.json();
-    }
+    const sleep = ms=>new Promise(r=>setTimeout(r,ms));
+    const api   =(p="",o={})=>fetch(`${WORKER_URL}${p}`,o).then(r=>r.ok?r.json():Promise.reject(r));
+    const getSt =()=>api("").then(d=>(d.status||d.desiredStatus||"UNKNOWN").toUpperCase());
 
-    async function getStatus() {
-      const data = await api("");
-      return (data.status || data.desiredStatus || "UNKNOWN").toUpperCase();
-    }
-
-    async function waitUntilHttpOk(url, maxTries = 180) { // 180 × 2 s = 6 min
-      const sleep = ms => new Promise(r => setTimeout(r, ms));
-      for (let i = 0; i < maxTries; i++) {
-        try {
-          const r = await fetch(url, { method: "GET", mode: "no-cors" });
-          if (r.ok || r.type === "opaque") return true;
-        } catch {}
+    async function waitHttpOk(url,max=180){
+      for(let i=0;i<max;i++){
+        try{const r=await fetch(url,{method:"GET",mode:"no-cors"});if(r.ok||r.type==="opaque")return true;}catch{}
         await sleep(2000);
       }
       return false;
     }
 
-    async function main() {
-      try {
-        msg.textContent = "Comprobando estado del servidor…";
-        let st = await getStatus();
-        if (st !== "RUNNING") {
-          msg.textContent = "Encendiendo el servidor, espera por favor…";
-          await api("/start", { method: "POST" });
-          for (let i = 0; i < 40 && st !== "RUNNING"; i++) {
-            await new Promise(r => setTimeout(r, 5000));
-            st = await getStatus();
-          }
+    async function startFlow(){
+      overlay.textContent="Comprobando servidor…";
+      let st=await getSt();
+      if(st!=="RUNNING"){
+        overlay.textContent="Encendiendo servidor…";
+        await api("/start",{method:"POST"});
+        for(let i=0;i<40&&st!=="RUNNING";i++){
+          await sleep(5000); st=await getSt();
         }
-
-        msg.textContent = "Servidor encendido. Preparando la aplicación…";
-        const ok = await waitUntilHttpOk(POD_URL);
-        if (ok) {
-          msg.textContent = "Redirigiendo al generador de fotomosaicos…";
-          await new Promise(r => setTimeout(r, 1000));
-          window.location.href = POD_URL;
-        } else {
-          msg.textContent = "🛑 No se pudo acceder a la aplicación. Intenta de nuevo más tarde.";
-        }
-      } catch (e) {
-        msg.textContent = `Error: ${e.message}`;
+      }
+      overlay.textContent="Cargando aplicación…";
+      if(await waitHttpOk(POD_URL)){
+        podRunning=true;
+        frame.src=POD_URL;
+        frame.style.display="block";
+        overlay.style.display="none";
+      }else{
+        overlay.textContent="🛑 No respondió a tiempo, inténtalo más tarde.";
       }
     }
 
-    main();
+    window.addEventListener("beforeunload",()=>{
+      if(podRunning) navigator.sendBeacon && navigator.sendBeacon(`${WORKER_URL}/stop`);
+    });
+
+    startFlow();
   </script>
 </body>
 </html>
