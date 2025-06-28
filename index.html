@@ -30,21 +30,21 @@
     const api   =(p="",o={})=>fetch(`${WORKER_URL}${p}`,o).then(r=>r.ok?r.json():Promise.reject(r));
     const getSt =()=>api("").then(d=>(d.status||d.desiredStatus||"UNKNOWN").toUpperCase());
 
-    async function waitUntilReady(url,max=300){
-      for(let i=0;i<max;i++){
-        try{
+    async function waitUntilReady(url, max = 300) { // 10 min à raison de 2 s
+      for (let i = 0; i < max; i++) {
+        try {
           const probe = await api(`/probe?u=${encodeURIComponent(url)}`);
-          if(probe.status>=200 && probe.status<300){
-            // extra: verifica que el GET no sea 404 con body vacío
-            const r = await fetch(url, { method: 'GET' });
-            const html = await r.text();
-            if(r.status===200 && html.length>100) return true;
+          if (probe.status >= 200 && probe.status < 300) {
+            await fetch(url + '?chk=' + Date.now(), { method: 'GET', mode: 'no-cors', cache: 'no-store' });
+            return true; // basta con que no dé error, aunque sea opaco
           }
-        }catch{}
+        } catch {}
+        overlay.textContent = `Servidor encendido. Esperando… (${i * 2}s)`;
         await sleep(2000);
       }
       return false;
     }
+
 
     function showFrame(){
       frame.addEventListener('load',()=>overlay.style.display='none',{once:true});
