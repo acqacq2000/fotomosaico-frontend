@@ -32,8 +32,8 @@
   async function waitUntilReady(url, max=180) {
     for (let i=0; i<max; i++) {
       try {
-        const res = await fetch(url, { method: "GET", mode: "cors", cache: "no-store" });
-        if (res.status >= 200 && res.status < 300) return true;
+        const r = await fetch(url, { method: "GET", mode: "no-cors", cache: "no-store" });
+          if (r.ok || r.type === "opaque") return true;
       } catch {}
       overlay.textContent = `Esperando disponibilidad del generador… (${i*2}s)`;
       await sleep(2000);
