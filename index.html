@@ -87,23 +87,25 @@
         statusEl.textContent='⛔️ Tiempo agotado';
         startBtn.disabled=stopBtn.disabled=false;
       }
-      async function waitUntilUp(url, maxTries = 30) {
-        for (let i = 0; i < maxTries; i++) {
+      async function waitUntilUp(url, tries = 40) {     // 40 × 3 s ≈ 2 min
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        for (let i = 0; i < tries; i++) {
           try {
+            // HEAD minimiza tráfico; modo no-CORS evita bloquear si aún no hay CORS
             const r = await fetch(url, { method: "HEAD", mode: "no-cors" });
-            if (r.status === 200 || r.type === "opaque") return true;
+            // Si la conexión se establece sin excepción, lo damos por bueno
+            if (r.ok || r.type === "opaque") return true;
           } catch { /* ignore */ }
-          await new Promise(r => setTimeout(r, 3000));  // 3 s
+          await sleep(3000);     // espera 3 s y reintenta
         }
         return false;
       }
-      
       async function readyState() {
         podRunning = true;
-        statusEl.textContent = "Servidor en marcha ⏳";
+        statusEl.textContent = "Servidor arrancando ⏳";
         if (await waitUntilUp(POD_URL)) {
           statusEl.textContent = "Servidor en marcha ✅";
-          frame.src = POD_URL;
+          frame.src = POD_URL;          // ahora sí cargamos la app
           frame.style.display = "block";
         } else {
           statusEl.textContent = "🛑 El contenedor no respondió a tiempo";
