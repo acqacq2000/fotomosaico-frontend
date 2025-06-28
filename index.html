@@ -30,11 +30,16 @@
     const api   =(p="",o={})=>fetch(`${WORKER_URL}${p}`,o).then(r=>r.ok?r.json():Promise.reject(r));
     const getSt =()=>api("").then(d=>(d.status||d.desiredStatus||"UNKNOWN").toUpperCase());
 
-    async function waitUntilReady(url,max=300){ // 300 × 2 s = 10 min
+    async function waitUntilReady(url,max=300){
       for(let i=0;i<max;i++){
         try{
           const probe = await api(`/probe?u=${encodeURIComponent(url)}`);
-          if(probe.status>=200 && probe.status<300) return true; // sólo 2xx
+          if(probe.status>=200 && probe.status<300){
+            // extra: verifica que el GET no sea 404 con body vacío
+            const r = await fetch(url, { method: 'GET' });
+            const html = await r.text();
+            if(r.status===200 && html.length>100) return true;
+          }
         }catch{}
         await sleep(2000);
       }
