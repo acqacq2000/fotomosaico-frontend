@@ -30,12 +30,18 @@
     const getSt =()=>api("").then(d=>(d.status||d.desiredStatus||"UNKNOWN").toUpperCase());
 
     // Comprueba que la URL devuelva algo distinto de 404 / 502 / 503
-    async function waitUntilReady(url,max=300){ // máx 10 min
+    // Espera hasta que la URL devuelva 200 OK. Usa 'cors' para que un 404 provoque error,
+    // así no avanzamos hasta que la app responda de verdad.
+    async function waitUntilReady(url,max=300){ // 300 × 2 s = 10 min
       for(let i=0;i<max;i++){
         try{
-          const r=await fetch(url,{method:"GET",mode:"no-cors"});
-          if(r.ok||r.type==="opaque") return true;
-        }catch{}
+          const r=await fetch(url,{method:"GET",mode:"cors",cache:"no-store"});
+          if(r.ok) return true; // solo 200–299
+        }catch{/* CORS o red */}
+        await sleep(2000);
+      }
+      return false;
+    }
         await sleep(2000);
       }
       return false;
