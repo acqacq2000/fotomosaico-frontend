@@ -33,9 +33,8 @@
     async function waitUntilReady(url,max=300){ // 300 × 2 s = 10 min
       for(let i=0;i<max;i++){
         try{
-          const r=await fetch(url,{method:"GET",mode:"no-cors",cache:"no-store"});
-          // aceptamos 2xx o respuestas opacas (proxy sin CORS)
-          if(r.ok || r.type==="opaque") return true;
+          const probe = await api(`/probe?u=${encodeURIComponent(url)}`);
+          if(probe.status>=200 && probe.status<300) return true; // sólo 2xx
         }catch{}
         await sleep(2000);
       }
