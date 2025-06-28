@@ -30,20 +30,18 @@
     const api   =(p="",o={})=>fetch(`${WORKER_URL}${p}`,o).then(r=>r.ok?r.json():Promise.reject(r));
     const getSt =()=>api("").then(d=>(d.status||d.desiredStatus||"UNKNOWN").toUpperCase());
 
-    async function waitUntilReady(url, max = 300) { // 10 min à raison de 2 s
+    async function waitUntilReady(url, max = 300) {  // 10 min, 2 s por intento
       for (let i = 0; i < max; i++) {
         try {
           const probe = await api(`/probe?u=${encodeURIComponent(url)}`);
-          if (probe.status >= 200 && probe.status < 300) {
-            await fetch(url + '?chk=' + Date.now(), { method: 'GET', mode: 'no-cors', cache: 'no-store' });
-            return true; // basta con que no dé error, aunque sea opaco
-          }
+          if (probe.status >= 200 && probe.status < 300) return true;  // nos basta con HEAD 2xx
         } catch {}
         overlay.textContent = `Servidor encendido. Esperando… (${i * 2}s)`;
         await sleep(2000);
       }
       return false;
     }
+
 
 
     function showFrame(){
