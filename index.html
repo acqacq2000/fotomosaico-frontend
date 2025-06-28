@@ -29,17 +29,17 @@
   const api   = (p="", o={}) => fetch(`${WORKER_URL}${p}`, o).then(r => r.ok ? r.json() : Promise.reject(r));
   const getSt = () => api("").then(d => (d.status || d.desiredStatus || "UNKNOWN").toUpperCase());
 
-  async function waitUntilReady(url, max=180) {
-    for (let i=0; i<max; i++) {
-      try {
-        const r = await fetch(url, { method: "GET", mode: "no-cors", cache: "no-store" });
-          if (r.ok || r.type === "opaque") return true;
-      } catch {}
-      overlay.textContent = `Esperando disponibilidad del generador… (${i*2}s)`;
-      await sleep(2000);
-    }
-    return false;
+  async function waitUntilReady(url, max = 300) {
+  for (let i = 0; i < max; i++) {
+    try {
+      const r = await fetch(url, { method: "GET", mode: "no-cors", cache: "no-store" });
+      // Acepta tanto 200-299 como respuestas 'opaque'
+      if (r.ok || r.type === "opaque") return true;
+    } catch {}
+    await sleep(2000);
   }
+  return false;
+}
 
   function showFrame() {
     overlay.textContent = "Aplicación lista, cargando…";
