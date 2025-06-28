@@ -1,138 +1,77 @@
 <!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta charset="utf-8" />
-    <title>Fotomosaico · Control de Pod</title>
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <style>
-      :root { font-family: system-ui, sans-serif; color-scheme: light dark; }
-      body  { margin:0; display:grid; min-height:100vh; grid-template-rows:auto 1fr; background:#0d1117; color:#c9d1d9; }
-      header{ padding:1rem 1.5rem; background:#161b22; }
-      h1    { margin:0; font-size:1rem; letter-spacing:.05em; }
-      main  { padding:1rem; display:flex; flex-direction:column; gap:1rem; }
-      button{ padding:.75rem 1.5rem; border:0; border-radius:.5rem; font-size:1rem; cursor:pointer; transition:opacity .2s; }
-      #startBtn{ background:#238636; color:#fff; }
-      #stopBtn { background:#da3633; color:#fff; }
-      button[disabled]{ opacity:.6; cursor:default; }
-      iframe{ flex:1 1 auto; border:none; border-radius:.75rem; width:100%; min-height:70vh; display:none; }
-    </style>
-  </head>
-  <body>
-    <header><h1>Control del servidor Fotomosaico</h1></header>
-    <main>
-      <p id="status">Comprobando estado…</p>
-      <button id="startBtn" style="display:none;">Encender y mostrar aplicación</button>
-      <button id="stopBtn"  style="display:none;">Apagar servidor</button>
-      <iframe id="appFrame"></iframe>
-    </main>
+<head>
+  <meta charset="utf-8" />
+  <title>Redirigiendo al generador de fotomosaicos…</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{font-family:system-ui,sans-serif;color-scheme:light dark}
+    body{margin:0;display:grid;place-items:center;min-height:100vh;background:#0d1117;color:#c9d1d9}
+    #msg{max-width:26rem;text-align:center;font-size:1rem;line-height:1.4}
+  </style>
+</head>
+<body>
+  <p id="msg">Comprobando servidor…</p>
 
-    <script>
-      // 👉 Sustituye estos valores
-      const WORKER_URL = "https://fotomosaico.acqacq2000.workers.dev"; // Proxy Cloudflare Worker
-      const POD_ID     = "ao66w2zl6kzlss";                               // Solo para formar la URL pública
-      const POD_URL = `https://${POD_ID}-5000.proxy.runpod.net`;   // ← 5000 es el puerto HTTP que expusiste
+  <script>
+    // ➜ 1. Configura tu Worker y Pod
+    const WORKER_URL = "https://fotomosaico.acqacq2000.workers.dev";
+    const POD_ID     = "ao66w2zl6kzlss";              // tu pod ID
+    const POD_URL    = `https://${POD_ID}-5000.proxy.runpod.net/`; // URL que finalmente abriremos
 
-      const statusEl = document.getElementById('status');
-      const startBtn = document.getElementById('startBtn');
-      const stopBtn  = document.getElementById('stopBtn');
-      const frame    = document.getElementById('appFrame');
-      let podRunning = false;
+    const msg = document.getElementById("msg");
 
-      async function api(path="", opts={}){
-        const res = await fetch(`${WORKER_URL}${path}`, opts);
-        if(!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
+    async function api(path = "", opts = {}) {
+      const r = await fetch(`${WORKER_URL}${path}`, opts);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    }
+
+    async function getStatus() {
+      const data = await api("");
+      return (data.status || data.desiredStatus || "UNKNOWN").toUpperCase();
+    }
+
+    async function waitUntilHttpOk(url, maxTries = 60) { // 60 × 2 s = 2 min
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      for (let i = 0; i < maxTries; i++) {
+        try {
+          const r = await fetch(url, { method: "GET", mode: "no-cors" });
+          if (r.ok || r.type === "opaque") return true;
+        } catch {}
+        await sleep(2000);
       }
-      async function getStatus(){
-        const data = await api("");
-        return (data.status||data.desiredStatus||'UNKNOWN').toUpperCase();
-      }
-      async function startPod(){
-        startBtn.disabled=true;
-        statusEl.textContent='Arrancando…';
-        await api("/start", {method:'POST'});
-        pollUntil('RUNNING');
-      }
-      async function stopPod(){
-        if(!podRunning) return;
-        stopBtn.disabled=true;
-        statusEl.textContent='Apagando…';
-        await api("/stop", {method:'POST'});
-        pollUntil('STOPPED');
-      }
-      function stopPodSync(){
-        if(!podRunning) return;
-        try{
-          if(navigator.sendBeacon){
-            navigator.sendBeacon(`${WORKER_URL}/stop`);
-          }else{
-            fetch(`${WORKER_URL}/stop`,{method:'POST',keepalive:true});
+      return false;
+    }
+
+    async function main() {
+      try {
+        msg.textContent = "Comprobando estado del servidor…";
+        let st = await getStatus();
+        if (st !== "RUNNING") {
+          msg.textContent = "Encendiendo el servidor, espera por favor…";
+          await api("/start", { method: "POST" });
+          // Espera a que pase a RUNNING
+          for (let i = 0; i < 40 && st !== "RUNNING"; i++) {
+            await new Promise(r => setTimeout(r, 5000));
+            st = await getStatus();
           }
-        }catch(e){}
-      }
-      async function pollUntil(target){
-        const delay=ms=>new Promise(r=>setTimeout(r,ms));
-        for(let i=0;i<120;i++){
-          try{
-            const st=await getStatus();
-            if(st===target){
-              if(target==='RUNNING') readyState();
-              else stoppedState();
-              return;
-            }
-            statusEl.textContent=`${st.toLowerCase()}…`;
-          }catch(e){ statusEl.textContent=e.message; }
-          await delay(5000);
         }
-        statusEl.textContent='⛔️ Tiempo agotado';
-        startBtn.disabled=stopBtn.disabled=false;
-      }
-      async function waitUntilUp(url, tries = 40) {     // 40 × 3 s ≈ 2 min
-        const sleep = ms => new Promise(r => setTimeout(r, ms));
-        for (let i = 0; i < tries; i++) {
-          try {
-            // HEAD minimiza tráfico; modo no-CORS evita bloquear si aún no hay CORS
-            const r = await fetch(url, { method: "HEAD", mode: "no-cors" });
-            // Si la conexión se establece sin excepción, lo damos por bueno
-            if (r.ok || r.type === "opaque") return true;
-          } catch { /* ignore */ }
-          await sleep(3000);     // espera 3 s y reintenta
-        }
-        return false;
-      }
-      async function readyState() {
-        podRunning = true;
-        statusEl.textContent = "Servidor arrancando ⏳";
-        if (await waitUntilUp(POD_URL)) {
-          statusEl.textContent = "Servidor en marcha ✅";
-          frame.src = POD_URL;          // ahora sí cargamos la app
-          frame.style.display = "block";
+
+        msg.textContent = "Servidor encendido. Preparando la aplicación…";
+        const ok = await waitUntilHttpOk(POD_URL);
+        if (ok) {
+          msg.textContent = "Redirigiendo al generador de fotomosaicos…";
+          window.location.href = POD_URL;
         } else {
-          statusEl.textContent = "🛑 El contenedor no respondió a tiempo";
+          msg.textContent = "🛑 No se pudo acceder a la aplicación. Intenta de nuevo más tarde.";
         }
-        stopBtn.style.display = "inline-block";
-        startBtn.style.display = "none";
+      } catch (e) {
+        msg.textContent = `Error: ${e.message}`;
       }
-      function stoppedState(){
-        podRunning=false;
-        statusEl.textContent='Servidor apagado 💤';
-        frame.style.display='none';
-        startBtn.style.display='inline-block';
-        startBtn.disabled=false;
-        stopBtn.style.display='none';
-      }
-      async function init(){
-        try{
-          const st=await getStatus();
-          (st==='RUNNING')? readyState(): stoppedState();
-        }catch(e){ statusEl.textContent=e.message; }
-      }
+    }
 
-      startBtn.addEventListener('click',startPod);
-      stopBtn.addEventListener('click',stopPod);
-      window.addEventListener('beforeunload',stopPodSync);
-
-      init();
-    </script>
-  </body>
+    main();
+  </script>
+</body>
 </html>
